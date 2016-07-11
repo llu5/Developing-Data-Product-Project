@@ -1,0 +1,297 @@
+Developing Data Product Course Project Presentation
+========================================================
+author: Li Lu
+date: 7/10/2016
+autosize: true
+
+Slide 1: Introduction of A Tool for Retrieving and Comparing two Pubmed Searches 
+========================================================
+
+For a live demonstration of R please visit <https://llu5.shinyapps.io/CourseProject/>.
+
+- This data product project is a database tool for helping users of heatlh scientists and researchers to discover and compare the dynamic trend of number of puplications on two topics and given years in live database of Pubmed of NCBI on two topics that users .
+- This tool allows users easily retrieve results of numbers from queries by using two search terms for each year and calculate ratios.
+- This tool plot the trend for result of each search term and draw a line of linear gression for comparing the trend.
+- This tool uses codes of RISmed   and yplot packages
+
+Slide 2: The code for ui.R
+========================================================
+
+```{r}
+library(shiny)
+# Define UI for application that draws a line chart.
+shinyUI(fluidPage(
+  
+  # Application title
+  titlePanel("Retrieving and Comparing Pubmed Search Results" ),
+  
+  # Sidebar with a slider input for number of bins 
+  sidebarPanel(
+    
+    textInput("id1", "Enter first search term:", "cancer"),
+
+    textInput("id2", "Enter second search term:", "heart disease"),
+    selectInput("id3", "Select a filter of research type for above searches",
+                c("all" = "",
+                  "molecular" = "molecular",
+                  "cellular" = "cellular",
+                  "genomic" = "genomic",
+                  "genetics" = "genetics",
+                  "epidemiology" = "epidemiology",
+                  "diagnosis" = "diagnosis",
+                  "treatment" = "treatment",
+                  "therapy" = "therapy",
+                  "demography" = "demography",
+                  "control" = "control",
+                  "prevention" = "prevention")),
+    selectInput("id4", "Starting Year",
+                       c("2011" = "2011",
+                         "2010" = "2010",
+                         "2009" = "2009",
+                         "2008" = "2008",
+                         "2007" = "2007",
+                         "2006" = "2006",
+                         "2005" = "2005",
+                         "2004" = "2004",
+                         "2003" = "2003",
+                         "2002" = "2002",
+                         "2001" = "2001",
+                         "2000" = "2000",
+                         "1999" = "1999")),
+    selectInput("id5", "Ending Year",
+                       c(
+                         "2014" = "2014",
+                         "2013" = "2013",
+                         "2012" = "2012",
+                         "2011" = "2011")),
+
+    submitButton('Submit')
+    
+  ),
+    
+    # Show a plot of the generated distribution
+    mainPanel(
+      h3('Search of Pubmed with two terms and year of publication:'),
+
+      tabsetPanel(
+        tabPanel("Plot1", plotOutput("plot1")), 
+        tabPanel("Summary of Data", verbatimTextOutput("summary")), 
+        tabPanel("Result and Documentation",  htmlOutput("oid3"),
+        tabPanel("Documentation",  htmlOutput("documentation")
+         )       
+                 )
+      )
+      
+      
+)
+)
+  
+)
+
+```
+
+Slide 3: The code for server.R
+========================================================
+
+```{r, echo=TRUE}
+library(RISmed)
+library(ggplot2)
+library(slam)
+library(devtools)
+library(RColorBrewer)
+library(wordcloud)
+library(plyr)
+
+# library(yplot)
+
+#tally each year beginning at 1970
+#In order not to overload the E-utility servers, NCBI recommends that users post no more than three
+#URL requests per second and limit large jobs to either weekends or between 9:00 PM and 5:00 AM
+#Eastern time during weekdays. Failure to comply with this policy may result in an IP address being
+#blocked from accessing NCBI.
+
+
+# Define server logic required to draw a histogram
+shinyServer(function(input, output) {
+  
+  # get total number of two serch results: done
+  # res <- EUtilsSummary(input$id1+" + "+input$id3, type="esearch", db="pubmed", datetype='pdat', mindate=input$id4, maxdate=input$id5, retmax=50000)
+  # qc<-QueryCount(res)
+  # get the ratio of total number of two search results done
+  # plot the trends of total number of pubmed results per year for each search in single plot with double Y axis  and lines of different color. Done.
+  # build and plot the linear model from total of pubmed results per year for each of the results
+
+  output$oid1 = renderPrint({QueryCount(EUtilsSummary(paste(input$id1," AND ",input$id3), type="esearch", db="pubmed", datetype='pdat', mindate=input$id4, maxdate=input$id5, retmax=50000))})
+  output$oid2 = renderPrint({QueryCount(EUtilsSummary(paste(input$id2," AND ",input$id3), type="esearch", db="pubmed", datetype='pdat', mindate=input$id4, maxdate=input$id5, retmax=50000))})
+  output$oid3 = renderUI({
+       q1total<- QueryCount(EUtilsSummary(paste(input$id1," AND ",input$id3), type="esearch", db="pubmed", datetype='pdat', mindate=input$id4, maxdate=input$id5, retmax=50000))
+       q2total<- QueryCount(EUtilsSummary(paste(input$id2," AND ",input$id3), type="esearch", db="pubmed", datetype='pdat', mindate=input$id4, maxdate=input$id5, retmax=50000))
+       ratioq1toq2<-q1total/q2total
+       HTML(paste("<H2>Results</H2></br>Total number for publications on ", input$id3 ," research of ", input$id1, " is <b>", q1total, "</b>, and the total number of publications on ", input$id3 ," research of ",input$id2, " is <b>",q2total , "</b>.
+                  </br> The ratio of total publications in Pubmed on ", input$id3, " research of ", input$id1," to ", input$id2 , " between ", input$id4, " and ", input$id5, " is: <b>", round(ratioq1toq2, digits = 3) ,"</b>",sep = ' '))
+       })
+  
+ 
+    
+  })
+```
+
+Slide 4: A sample plot that can be reproduced Locally in R Presenter
+========================================================
+
+```{r, echo=FALSE}
+library(RISmed)
+library(ggplot2)
+library(slam)
+library(devtools)
+library(RColorBrewer)
+library(wordcloud)
+library(plyr)
+getPubmedTrend.internal <- function(searchTerm, year) {
+  # withProgress(message = 'Making plot', value = 0, {
+    # Number of times we'll go through the loop
+    # n <- as.numeric(input$id5)-as.numeric(input$id4)
+    # 
+    num <- array()
+    
+    x <- 1
+    
+    for (i in year){
+      
+      Sys.sleep(1)
+      
+     # cat("querying year ", i, "\n")
+      
+      r <- EUtilsSummary(searchTerm, type='esearch', db='pubmed', mindate=i, maxdate=i)
+      
+      num[x] <- QueryCount(r)
+      # Increment the progress bar, and update the detail text.
+      # incProgress(1/n, detail = paste("Doing part", i))
+      
+      
+      x <- x + 1
+      
+    }
+    
+  # })
+  res <- data.frame(year=year, number=num)
+  
+  return(res)
+  
+}
+getPubmedTrend <- function(searchTerm, year) {
+  
+  if (length(searchTerm) == 1)
+    
+    return(getPubmedTrend.internal(searchTerm, year))
+  
+  res <- lapply(searchTerm, getPubmedTrend.internal, year=year)
+  
+  names(res) <- searchTerm
+  
+  res.df <- ldply(res)
+  
+  colnames(res.df)[1] <- "TERM"
+  
+  return(res.df)
+  
+}
+
+    plotPubmedTrend <- function(x) {
+      
+      year <- number <- TERM <- NULL
+      
+
+      
+      if (ncol(x) == 3 && "TERM" %in% colnames(x)) {
+        
+        p <- ggplot(x, aes(factor(year), number, group=TERM, color=TERM))
+        p <-p  + labs(x=paste("Year & Query date: ", Sys.time(), sep=""), y="Number of articles" )
+          
+        p <- p + geom_point(size=3) + geom_line()+geom_smooth(method="lm") 
+      } else {
+        
+        p <- ggplot(x, aes(year, number))+geom_point(size=3)
+        p <-p +labs(x=paste("Year & Query date: ", Sys.time(), sep=""), y="Number of articles" )
+        p <-p + geom_line()+geom_smooth(method="lm")
+        
+      }
+      
+      return(p)
+      
+    }
+# ifall<-if(input$id3 !="") " AND " else "";
+# term = c(paste(input$id1, ifall,input$id3), paste(input$id2, ifall,input$id3))
+term = c('"heart disease"', '"cancer"')
+
+pm <-getPubmedTrend(term, year=2011:2014) 
+                  plotPubmedTrend(pm)
+                  
+                  
+```
+
+Slide 5: a Sample Data Summary  that can be reproduced Locally in R Presenter
+========================================================
+
+```{r, echo=FALSE}
+library(RISmed)
+library(ggplot2)
+library(slam)
+library(devtools)
+library(RColorBrewer)
+library(wordcloud)
+library(plyr)
+getPubmedTrend.internal <- function(searchTerm, year) {
+  # withProgress(message = 'Making plot', value = 0, {
+    # Number of times we'll go through the loop
+    # n <- as.numeric(input$id5)-as.numeric(input$id4)
+    # 
+    num <- array()
+    
+    x <- 1
+    
+    for (i in year){
+      
+      Sys.sleep(1)
+      
+    #  cat("querying year ", i, "\n")
+      
+      r <- EUtilsSummary(searchTerm, type='esearch', db='pubmed', mindate=i, maxdate=i)
+      
+      num[x] <- QueryCount(r)
+      # Increment the progress bar, and update the detail text.
+      # incProgress(1/n, detail = paste("Doing part", i))
+      
+      
+      x <- x + 1
+      
+    }
+    
+  # })
+  res <- data.frame(year=year, number=num)
+  
+  return(res)
+  
+}
+getPubmedTrend <- function(searchTerm, year) {
+  
+  if (length(searchTerm) == 1)
+    
+    return(getPubmedTrend.internal(searchTerm, year))
+  
+  res <- lapply(searchTerm, getPubmedTrend.internal, year=year)
+  
+  names(res) <- searchTerm
+  
+  res.df <- ldply(res)
+  
+  colnames(res.df)[1] <- "TERM"
+  
+  return(res.df)
+  
+}
+term = c('"heart disease"', '"cancer"')
+
+pm <-getPubmedTrend(term, year=2011:2014) 
+pm
+```
